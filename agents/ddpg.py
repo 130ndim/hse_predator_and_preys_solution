@@ -10,7 +10,7 @@ import torch
 from torch.nn import functional as F
 from torch.optim import Adam
 
-from . import Agent, GNNActor, ActorConfig, GNNCritic, CriticConfig
+from . import Agent, GNNActor, PCActor, ActorConfig, GNNCritic, CriticConfig, PCCritic
 from .utils import soft_update, ZeroCenteredNoise
 from utils.buffer import Batch, State
 
@@ -51,10 +51,10 @@ class DDPGAgent(Agent):
 
     def __init__(self, config: DDPGConfig = DDPGConfig()):
         self.config = config
-        self.actor = GNNActor(config.actor)
+        self.actor = PCActor(config.actor)
         self.target_actor = deepcopy(self.actor)
 
-        self.critic = GNNCritic(config.critic)
+        self.critic = PCCritic(config.critic)
         self.target_critic = deepcopy(self.critic)
 
         self.actor_optim = Adam(self.actor.parameters(), lr=config.actor.lr)

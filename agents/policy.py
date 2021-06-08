@@ -8,7 +8,7 @@ import torch
 from torch import Tensor, nn
 
 from .net import FFN
-from .net.layers import MHA, Embedding
+from .net.layers import MHA, Embedding, PointConv
 
 import os
 
@@ -45,14 +45,9 @@ class GNNActor(nn.Module):
         self.embedding = Embedding(config.hidden_sizes[0])
         self.mha = MHA(hs=config.hidden_sizes[0])
 
-        self.net = FFN(list(config.hidden_sizes) + [1])
-        self.net.seq.add_module(str(len(self.net.seq)), nn.Tanh())  # type: ignore
-
-        self.action_lin = nn.Linear(2, config.hidden_sizes[0])
-
         self._entity = config.entity
 
-        self.net = FFN(list(config.hidden_sizes) + [2])
+        self.net = FFN(list(config.hidden_sizes) + [1])
         self.net.seq.add_module(str(len(self.net.seq)), nn.Tanh())
         self.entity_idx = int(config.entity == 'prey')
 
@@ -63,13 +58,49 @@ class GNNActor(nn.Module):
 
         pos = torch.cat([pred_state, prey_state, obst_state[..., :-1]], dim=1)
 
-        out = (h_pred, h_prey, h_obst)
-        for i in range(2):
-            out = self.mha(*out, pos)
+        out_ = self.mha(h_pred, h_prey, h_obst, pos)
 
-        out = out[self._entity == 'prey']
+        out = out_[self._entity == 'prey']
         out = self.net(out)
 
-        angle = torch.atan2(*out.permute(2, 0, 1))
-        normalized = angle / math.pi
-        return normalized.unsqueeze(-1)
+        return out
+
+
+class PCActor(nn.Module):
+    def __init__(self, config: ActorConfig):
+        super().__init__()
+        self.embedding = nn.Parameter(Tensor(1, 2, config.hidden_sizes[0]))
+        self.obst_embedding = nn.Linear(1, config.hidden_sizes[0])
+        self.conv1 = PointConv(config.hidden_sizes[0])
+        self.conv2 = PointConv(config.hidden_sizes[0], config.hidden_sizes[0])
+
+        self._entity = config.entity
+
+        self.net = FFN(list(config.hidden_sizes) + [1])
+        self.net.seq.add_module(str(len(self.net.seq)), nn.Tanh())
+        self.entity_idx = int(config.entity == 'prey')
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.embedding.data.normal_()
+
+    def forward(self, state: State):
+        B = state.pred_state.size(0)
+        pos_pred, pos_prey = state.pred_state / 9., state.prey_state / 9.
+        pos_obst, r_obst = state.obst_state.split((2, 1), dim=-1)
+
+        pos_obst /= 9.
+
+        x_pred = self.embedding[:, 0].repeat((B, pos_pred.size(1), 1))
+        x_prey = self.embedding[:, 1].repeat((B, pos_prey.size(1), 1))
+        x_obst = self.obst_embedding(r_obst)
+
+        x_pred, x_prey, x_obst = self.conv1(x_pred, x_prey, x_obst, pos_pred, pos_prey, pos_obst)
+
+        out = self.conv2(x_pred, x_prey, x_obst, x_pred, x_prey, x_obst)[self.entity_idx]
+
+        out = self.net(out)
+
+        return out
+

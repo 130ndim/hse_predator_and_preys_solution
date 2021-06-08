@@ -12,14 +12,14 @@ AGGRS = {
 
 
 class PointConv(nn.Module):
-    def __init__(self, hidden_size, aggrs=('min', 'max', 'mean')):
+    def __init__(self, hidden_size, pos_size: int = 2, aggrs=('min', 'max', 'mean')):
         super().__init__()
         self.lin = Lin(hidden_size, hidden_size)
         self.act = nn.ELU()
 
         self.aggrs = [AGGRS[aggr] for aggr in aggrs]
 
-        self.nn1 = Seq(Lin(hidden_size + 2, hidden_size * 2), ReLU(), Lin(hidden_size * 2, hidden_size))
+        self.nn1 = Seq(Lin(hidden_size + pos_size, hidden_size * 2), ReLU(), Lin(hidden_size * 2, hidden_size))
         self.nn2 = Seq(Lin(hidden_size * len(aggrs), hidden_size * 2), ReLU(), Lin(hidden_size * 2, hidden_size))
 
     def forward(

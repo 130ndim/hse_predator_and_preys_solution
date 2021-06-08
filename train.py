@@ -44,7 +44,7 @@ def evaluate_policy(env, predator_agent, prey_agent, episodes=5):
 
 
 if __name__ == '__main__':
-    buffer_steps = 100000
+    buffer_steps = 50000
     steps = 2000000 + buffer_steps
     batch_size = 64
 
@@ -69,6 +69,8 @@ if __name__ == '__main__':
     state = env.reset()
     # buffer_bar = tqdm(total=buffer_steps)
     global_bar = tqdm(total=steps)
+
+    torch.autograd.set_detect_anomaly(True)
 
     pred_loss = []
     prey_loss = []

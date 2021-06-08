@@ -30,7 +30,7 @@ class MHA(nn.Module):
 
         attn_mask = self.conv(dm).sigmoid().reshape(-1, N, N)
 
-        x += self.entity_emb.weight.repeat_interleave(sizes, dim=0)
+        x = x + self.entity_emb.weight.repeat_interleave(sizes, dim=0)
 
         x = x.transpose(0, 1)
 
