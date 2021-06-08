@@ -1,3 +1,6 @@
+import os
+import os.path as osp
+
 import numpy as np
 
 import torch
@@ -9,6 +12,15 @@ from agents import CriticConfig, ActorConfig
 
 from utils import Buffer
 from predators_and_preys_env.env import PredatorsAndPreysEnv
+
+import argparse
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-gpu', '--gpu', dest='gpu', type=int, default=0)
+parser.add_argument('-batch_size', '--batch_size', dest='batch_size', type=int, default=64)
+parser.add_argument('-ckpt_save_path', '--ckpt_save_path', dest='ckpt_save_path', type=str)
+args = parser.parse_args()
 
 
 def evaluate_policy(env, predator_agent, prey_agent, episodes=5):
@@ -44,8 +56,8 @@ if __name__ == '__main__':
                              entity='prey')
 
     env = PredatorsAndPreysEnv(render=False)
-    predator_agent = DDPGAgent(predator_config).cuda(2)
-    prey_agent = DDPGAgent(prey_config).cuda(2)
+    predator_agent = DDPGAgent(predator_config).cuda(args.gpu)
+    prey_agent = DDPGAgent(prey_config).cuda(args.gpu)
 
     print(next(predator_agent.actor.parameters()).device)
 
@@ -102,6 +114,7 @@ if __name__ == '__main__':
         global_step_count += 1
 
         global_bar.update(1)
+        os.makedirs(args.ckpt_save_path, exist_ok=True)
         if global_step_count > buffer_steps:
             if (global_step_count) % 20000 == 0:
                 mean, std = evaluate_policy(env, predator_agent, prey_agent)
@@ -110,11 +123,11 @@ if __name__ == '__main__':
                                            f'prey_r = {int(mean[1])}({int(std[1])})')
 
             if (global_step_count) % 50000 == 0:
-                predator_agent.save(f'/mnt/tank/scratch/dleonov/models/rl/ddpg_pred_{global_step_count}.pt')
-                prey_agent.save(f'/mnt/tank/scratch/dleonov/models/rl/ddpg_prey_{global_step_count}.pt')
+                predator_agent.save(osp.join(args.ckpt_save_path, f'ddpg_pred_{global_step_count}.pt'))
+                prey_agent.save(osp.join(args.ckpt_save_path, f'ddpg_prey_{global_step_count}.pt'))
 
             if (global_step_count) % 200000 == 0:
-                torch.save(pred_loss, '/mnt/tank/scratch/dleonov/pred_loss.pt')
-                torch.save(prey_loss, '/mnt/tank/scratch/dleonov/prey_loss.pt')
-                torch.save(rewards, '/mnt/tank/scratch/dleonov/rewards.pt')
+                torch.save(pred_loss, osp.join(args.ckpt_save_path, 'pred_loss.pt'))
+                torch.save(prey_loss, osp.join(args.ckpt_save_path, 'prey_loss.pt'))
+                torch.save(rewards, osp.join(args.ckpt_save_path, 'rewards.pt'))
 
