@@ -7,7 +7,8 @@ from torch.nn import Sequential as Seq, Linear as Lin, Conv2d, ReLU
 AGGRS = {
     'min': lambda x: torch.min(x, dim=-2)[0],
     'max': lambda x: torch.max(x, dim=-2)[0],
-    'mean': lambda x: torch.mean(x, dim=-2)
+    'mean': lambda x: torch.mean(x, dim=-2),
+    'std': lambda x: torch.std(x, dim=-2)
 }
 
 

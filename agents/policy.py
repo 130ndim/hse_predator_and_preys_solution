@@ -19,7 +19,7 @@ from utils.buffer import State
 @dataclass
 class ActorConfig:
     input_size: Union[int, Tuple[int, int, int]] = (2, 2, 3)
-    hidden_sizes: Sequence[int] = (128, 128)
+    hidden_sizes: Sequence[int] = (64, 64, 64)
 
     lr: float = 3e-4
 
@@ -72,7 +72,7 @@ class PCActor(nn.Module):
         self.embedding = nn.Parameter(Tensor(1, 2, config.hidden_sizes[0]))
         self.obst_embedding = nn.Linear(1, config.hidden_sizes[0])
         self.conv1 = PointConv(config.hidden_sizes[0])
-        self.conv2 = PointConv(config.hidden_sizes[0], config.hidden_sizes[0])
+        # self.conv2 = PointConv(config.hidden_sizes[0], config.hidden_sizes[0])
 
         self._entity = config.entity
 
@@ -96,9 +96,9 @@ class PCActor(nn.Module):
         x_prey = self.embedding[:, 1].repeat((B, pos_prey.size(1), 1))
         x_obst = self.obst_embedding(r_obst)
 
-        x_pred, x_prey, x_obst = self.conv1(x_pred, x_prey, x_obst, pos_pred, pos_prey, pos_obst)
+        out = self.conv1(x_pred, x_prey, x_obst, pos_pred, pos_prey, pos_obst)[self.entity_idx]
 
-        out = self.conv2(x_pred, x_prey, x_obst, x_pred, x_prey, x_obst)[self.entity_idx]
+        # out = self.conv2(x_pred, x_prey, x_obst, x_pred, x_prey, x_obst)[self.entity_idx]
 
         out = self.net(out)
 
