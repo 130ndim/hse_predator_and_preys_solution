@@ -55,15 +55,15 @@ if __name__ == '__main__':
     predator_config = DDPGConfig(critic=CriticConfig(input_size=(3, 2, 3), entity='predator'),
                                  actor=ActorConfig(entity='predator'),
                                  entity='predator',
-                                 actor_update_freq=1,
-                                 soft_update_freq=1,
-                                 tau=0.999,
+                                 # actor_update_freq=1,
+                                 # soft_update_freq=1,
+                                 # tau=0.999,
                                  )
     prey_config = DDPGConfig(critic=CriticConfig(input_size=(2, 3, 3), entity='prey'),
                              actor=ActorConfig(entity='prey'),
-                             actor_update_freq=1,
-                             soft_update_freq=1,
-                             tau=0.999,
+                             # actor_update_freq=1,
+                             # soft_update_freq=1,
+                             # tau=0.999,
                              entity='prey')
 
     env = PredatorsAndPreysEnv(render=False)
