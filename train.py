@@ -67,7 +67,7 @@ if __name__ == '__main__':
                              entity='prey')
 
     env = PredatorsAndPreysEnv(render=False)
-    predator_agent = DDPGAgent(predator_config).cuda(args.device)
+    predator_agent = DDPGAgent(predator_config).to(args.device)
     prey_agent = DDPGAgent(prey_config).to(args.device)
 
     print(next(predator_agent.actor.parameters()).device)
