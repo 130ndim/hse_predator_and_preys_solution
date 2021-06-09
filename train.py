@@ -19,7 +19,7 @@ import argparse
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-gpu', '--gpu', dest='gpu', type=int, default=0)
+parser.add_argument('-device', '--device', dest='device', default=None)
 parser.add_argument('-batch_size', '--batch_size', dest='batch_size', type=int, default=64)
 parser.add_argument('-ckpt_save_path', '--ckpt_save_path', dest='ckpt_save_path', default='.', type=str)
 args = parser.parse_args()
@@ -67,10 +67,8 @@ if __name__ == '__main__':
                              entity='prey')
 
     env = PredatorsAndPreysEnv(render=False)
-    predator_agent = DDPGAgent(predator_config)\
-        .cuda(args.gpu)
-    prey_agent = DDPGAgent(prey_config)\
-        .cuda(args.gpu)
+    predator_agent = DDPGAgent(predator_config).cuda(args.device)
+    prey_agent = DDPGAgent(prey_config).to(args.device)
 
     print(next(predator_agent.actor.parameters()).device)
 
