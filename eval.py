@@ -24,6 +24,7 @@ def evaluate_policy(env, predator_agent, prey_agent, episodes=5):
     for _ in range(episodes):
         done = False
         state = env.reset()
+        print(state)
         pred_reward = prey_reward = 0.
 
         while not done:
@@ -45,12 +46,44 @@ if __name__ == '__main__':
     # prey_config = DDPGConfig(critic=CriticConfig(input_size=(2, 3, 3), entity='prey'),
     #                          actor=ActorConfig(entity='prey'),
     #                          entity='prey')
-
-    env = PredatorsAndPreysEnv(render=True)
-    predator_agent = DDPGAgent().from_ckpt('./ddpg_pred_100000.pt', map_location='cpu')
+    config = {
+        "game": {
+            "num_obsts": 10,
+            "num_preds": 2,
+            "num_preys": 5,
+            "x_limit": 9,
+            "y_limit": 9,
+            "obstacle_radius_bounds": [0.8, 1.5],
+            "prey_radius": 0.8,
+            "predator_radius": 1.0,
+            "predator_speed": 6.0,
+            "prey_speed": 9.0,
+            "world_timestep": 1 / 40,
+            "frameskip": 2
+        },
+        "environment": {
+            "frameskip": 2,
+            "time_limit": 1000
+        }
+    }
+    env = PredatorsAndPreysEnv(config, render=True)
+    predator_agent = DDPGAgent\
+        .from_ckpt('./ddpg_pred_80000.pt', map_location='cpu')
     predator_agent.eval()
-    prey_agent = DDPGAgent().from_ckpt('./ddpg_prey_100000.pt', map_location='cpu')
+    predator_agent.add_noise_on_inference = True
+    predator_agent.actor.eval()
+    prey_agent = DDPGAgent\
+        .from_ckpt('./ddpg_prey_80000.pt', map_location='cpu')
     prey_agent.eval()
+    prey_agent.add_noise_on_inference = True
+    prey_agent.actor.eval()
+    print(prey_agent.noise)
+    for n, p in predator_agent.actor.net.seq.named_parameters():
+        print(n, p)
+
+    # for n, p in prey_agent.actor.named_parameters():
+    #     print(n, p.mean(), p.std())
+
 
     print(evaluate_policy(env, predator_agent, prey_agent))
 

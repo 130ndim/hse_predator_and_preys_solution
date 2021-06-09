@@ -9,9 +9,11 @@ from torch import Tensor
 
 def dict2state(dict_):
     state = []
-    for idx, entity in enumerate(('predators', 'preys')):
-        for obj in dict_[entity]:
-            state += [obj['x_pos'], obj['y_pos']]
+    # for idx, entity in enumerate(('predators', 'preys')):
+    for obj in dict_['predators']:
+        state += [obj['x_pos'], obj['y_pos']]
+    for obj in dict_['preys']:
+        state += [obj['x_pos'], obj['y_pos'], obj['is_alive']]
     for obj in dict_['obstacles']:
         state += [obj['x_pos'], obj['y_pos'], obj['radius']]
     return state
@@ -77,7 +79,7 @@ class Buffer:
                  obstacle_config: Optional[EntityConfig] = None,
                  buffer_size: int = 1000000):
         self.predator_config = predator_config or {'n': 2, 'state_dim': 2}
-        self.prey_config = prey_config or {'n': 5, 'state_dim': 2}
+        self.prey_config = prey_config or {'n': 5, 'state_dim': 3}
         self.obstacle_config = obstacle_config or {'n': 10, 'state_dim': 3}
 
         self.buffer_size = buffer_size

@@ -18,26 +18,26 @@ def hard_update(target: Module, source: Module) -> None:
 class OUNoise:
     state = None
 
-    def __init__(self, action_dim, n_entities, scale=0.1, mu=0, theta=0.15, sigma=0.2):
-        self.action_dim = action_dim
-        self.n_entities = n_entities
+    def __init__(self, scale=0.1, mu=0, theta=0.15, sigma=0.2):
         self.scale = scale
         self.mu = mu
         self.theta = theta
         self.sigma = sigma
-        self.reset()
+        # self.reset()
 
-    def reset(self):
-        self.state = np.ones((self.n_entities, self.action_dim)) * self.mu
+    # def reset(self):
+    #     self.state = np.ones((self.n_entities, self.action_dim)) * self.mu
 
     def noise(self):
         x = self.state
-        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(len(x))
+        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(*x.shape)
         self.state = x + dx
         return self.state * self.scale
 
-    def __add__(self, other: torch.Tensor):
-        return other + self.noise
+    def __call__(self, other: torch.Tensor):
+        if self.state is None:
+            self.state = np.ones_like(other) * self.mu
+        return other + self.noise()
 
 
 class ZeroCenteredNoise:

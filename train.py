@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import os
 import os.path as osp
 
@@ -19,7 +21,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-gpu', '--gpu', dest='gpu', type=int, default=0)
 parser.add_argument('-batch_size', '--batch_size', dest='batch_size', type=int, default=64)
-parser.add_argument('-ckpt_save_path', '--ckpt_save_path', dest='ckpt_save_path', type=str)
+parser.add_argument('-ckpt_save_path', '--ckpt_save_path', dest='ckpt_save_path', default='.', type=str)
 args = parser.parse_args()
 
 
@@ -48,20 +50,31 @@ if __name__ == '__main__':
     steps = 2000000 + buffer_steps
     batch_size = 64
 
+    loss_aggr_steps = 100
+
     predator_config = DDPGConfig(critic=CriticConfig(input_size=(3, 2, 3), entity='predator'),
                                  actor=ActorConfig(entity='predator'),
-                                 entity='predator')
+                                 entity='predator',
+                                 actor_update_freq=1,
+                                 soft_update_freq=1,
+                                 tau=0.999,
+                                 )
     prey_config = DDPGConfig(critic=CriticConfig(input_size=(2, 3, 3), entity='prey'),
                              actor=ActorConfig(entity='prey'),
+                             actor_update_freq=1,
+                             soft_update_freq=1,
+                             tau=0.999,
                              entity='prey')
 
     env = PredatorsAndPreysEnv(render=False)
-    predator_agent = DDPGAgent(predator_config).cuda(args.gpu)
-    prey_agent = DDPGAgent(prey_config).cuda(args.gpu)
+    predator_agent = DDPGAgent(predator_config)\
+        .cuda(args.gpu)
+    prey_agent = DDPGAgent(prey_config)\
+        .cuda(args.gpu)
 
     print(next(predator_agent.actor.parameters()).device)
 
-    buffer = Buffer(buffer_size=500000)
+    buffer = Buffer(buffer_size=200000)
 
     global_step_count = 0
     done = True
@@ -75,6 +88,7 @@ if __name__ == '__main__':
     pred_loss = []
     prey_loss = []
     rewards = []
+    aggr_loss = defaultdict(list)
     while True:
         predator_agent.train()
         prey_agent.train()
@@ -84,16 +98,19 @@ if __name__ == '__main__':
             # buffer_bar.update(1)
         else:
             # buffer_bar.disable = True
+            pred_loss_ = predator_agent.update(buffer.get_batch(batch_size, 'predator'))
+            pred_loss.append(pred_loss_)
+            for k, v in pred_loss_.items():
+                aggr_loss['pred_'+k].append(v)
+
+            prey_loss_ = prey_agent.update(buffer.get_batch(batch_size, 'prey'))
+            prey_loss.append(prey_loss_)
+            for k, v in prey_loss_.items():
+                aggr_loss['prey_'+k].append(v)
+
             predator_actions = predator_agent.act(state)
             prey_actions = prey_agent.act(state)
 
-            loss = predator_agent.update(buffer.get_batch(batch_size, 'predator'))
-            pred_loss.append(loss)
-            # global_bar.set_postfix(loss)
-
-            loss = prey_agent.update(buffer.get_batch(batch_size, 'prey'))
-            prey_loss.append(loss)
-            # global_bar.set_postfix(loss)
 
         next_state, reward, done = env.step(predator_actions, prey_actions)
 
@@ -118,13 +135,19 @@ if __name__ == '__main__':
         global_bar.update(1)
         os.makedirs(args.ckpt_save_path, exist_ok=True)
         if global_step_count > buffer_steps:
+
+            if (global_step_count) % loss_aggr_steps == 0:
+                losses = {k: np.nanmean(v) for k, v in aggr_loss.items()}
+                global_bar.set_postfix(losses)
+                aggr_loss = defaultdict(list)
+
             if (global_step_count) % 20000 == 0:
                 mean, std = evaluate_policy(env, predator_agent, prey_agent)
                 rewards.append((mean, std))
                 global_bar.set_description(f'pred_r = {int(mean[0])}({int(std[0])}) | '
                                            f'prey_r = {int(mean[1])}({int(std[1])})')
 
-            if (global_step_count) % 50000 == 0:
+            if (global_step_count) % 5000 == 0:
                 predator_agent.save(osp.join(args.ckpt_save_path, f'ddpg_pred_{global_step_count}.pt'))
                 prey_agent.save(osp.join(args.ckpt_save_path, f'ddpg_prey_{global_step_count}.pt'))
 

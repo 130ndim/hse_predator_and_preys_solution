@@ -18,7 +18,9 @@ from utils.buffer import State
 @dataclass
 class CriticConfig:
     input_size: Union[int, Tuple[int, int, int]] = 3
-    hidden_sizes: Sequence[int] = (256, 256, 256)
+    hidden_sizes: Sequence[int] = (64, 64, 64)
+
+    max_grad_norm: float = 0.5
 
     lr: float = 1e-3
 
@@ -76,10 +78,10 @@ class GNNCritic(nn.Module):
 class PCCritic(nn.Module):
     def __init__(self, config: CriticConfig):
         super().__init__()
-        self.embedding = nn.Parameter(Tensor(1, 2, config.hidden_sizes[0]))
+        self.embedding = nn.Embedding(5, config.hidden_sizes[0])
         self.obst_embedding = nn.Linear(1, config.hidden_sizes[0])
 
-        self.action_embedding = nn.Linear(1, config.hidden_sizes[0])
+        self.action_embedding = nn.Linear(2, config.hidden_sizes[0])
         self.conv1 = PointConv(config.hidden_sizes[0])
         # self.conv2 = PointConv(config.hidden_sizes[0], config.hidden_sizes[0])
 
@@ -92,27 +94,34 @@ class PCCritic(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.xavier_normal_(self.embedding, 0.1)
-        nn.init.xavier_normal_(self.obst_embedding.weight, 0.1)
+        nn.init.xavier_normal_(self.embedding.weight)
+        nn.init.xavier_normal_(self.obst_embedding.weight)
         nn.init.zeros_(self.obst_embedding.bias)
-        nn.init.xavier_normal_(self.action_embedding.weight, 0.1)
+        nn.init.xavier_normal_(self.action_embedding.weight)
         nn.init.zeros_(self.action_embedding.bias)
         self.conv1.reset_parameters()
         self.net.reset_parameters()
-        self.net.seq[-1].weight.data.uniform_(-3e-2, 3e-2)
+        self.net.seq[-1].weight.data.uniform_(-1e-2, 1e-2)
 
     def forward(self, state: State, action: Tensor):
         B = state.pred_state.size(0)
-        pos_pred, pos_prey = state.pred_state / 9., state.prey_state / 9.
-        pos_obst, r_obst = state.obst_state.split((2, 1), dim=-1)
 
+        pos_pred = state.pred_state / 9.
+
+        pos_prey, is_alive_prey = state.prey_state.split((2, 1), dim=-1)
+        pos_prey = pos_prey / 9.
+        is_alive_prey = is_alive_prey.squeeze(-1).long()
+
+        pos_obst, r_obst = state.obst_state.split((2, 1), dim=-1)
         r_obst = (r_obst - 0.8) / 0.7
         pos_obst /= 9.
 
-        x_action = self.action_embedding(action)
-        x_pred = self.embedding[:, 0].repeat((B, pos_pred.size(1), 1))
-        x_prey = self.embedding[:, 1].repeat((B, pos_prey.size(1), 1))
-        x_obst = self.obst_embedding(r_obst)
+        x_pred = self.embedding.weight[2].repeat((B, pos_pred.size(1), 1))
+        x_prey = self.embedding.weight[3].repeat((B, pos_prey.size(1), 1)) + self.embedding(is_alive_prey)
+        x_obst = self.embedding.weight[4].repeat((B, pos_obst.size(1), 1)) + self.obst_embedding(r_obst)
+
+        action *= math.pi
+        x_action = self.action_embedding(torch.cat([action.sin(), action.cos()], dim=-1))
 
         if self._entity == 'prey':
             x_prey += x_action

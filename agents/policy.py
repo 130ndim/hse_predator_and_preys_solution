@@ -6,9 +6,10 @@ from typing_extensions import Literal
 
 import torch
 from torch import Tensor, nn
+from torch.nn import functional as F
 
 from .net import FFN
-from .net.layers import MHA, Embedding, PointConv
+from .net.layers import MHA, Embedding, PointConv, Atan2
 
 import os
 
@@ -19,7 +20,9 @@ from utils.buffer import State
 @dataclass
 class ActorConfig:
     input_size: Union[int, Tuple[int, int, int]] = (2, 2, 3)
-    hidden_sizes: Sequence[int] = (256, 256, 256)
+    hidden_sizes: Sequence[int] = (64, 64, 64)
+
+    max_grad_norm: float = 0.5
 
     lr: float = 1e-3
 
@@ -69,21 +72,22 @@ class GNNActor(nn.Module):
 class PCActor(nn.Module):
     def __init__(self, config: ActorConfig):
         super().__init__()
-        self.embedding = nn.Parameter(Tensor(1, 2, config.hidden_sizes[0]))
+        self.embedding = nn.Embedding(5, config.hidden_sizes[0])
         self.obst_embedding = nn.Linear(1, config.hidden_sizes[0])
+
         self.conv1 = PointConv(config.hidden_sizes[0])
         # self.conv2 = PointConv(config.hidden_sizes[0], config.hidden_sizes[0])
 
         self._entity = config.entity
 
-        self.net = FFN(list(config.hidden_sizes) + [1])
+        self.net = FFN(list(config.hidden_sizes) + [2])
         self.net.seq.add_module(str(len(self.net.seq)), nn.Tanh())
         self.entity_idx = int(config.entity == 'prey')
 
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.xavier_normal_(self.embedding)
+        nn.init.xavier_normal_(self.embedding.weight)
         nn.init.xavier_normal_(self.obst_embedding.weight)
         nn.init.zeros_(self.obst_embedding.bias)
         self.conv1.reset_parameters()
@@ -92,21 +96,29 @@ class PCActor(nn.Module):
 
     def forward(self, state: State):
         B = state.pred_state.size(0)
-        pos_pred, pos_prey = state.pred_state / 9., state.prey_state / 9.
-        pos_obst, r_obst = state.obst_state.split((2, 1), dim=-1)
 
+        pos_pred = state.pred_state / 9.
+        pos_prey, is_alive_prey = state.prey_state.split((2, 1), dim=-1)
+        pos_prey = pos_prey / 9.
+        is_alive_prey = is_alive_prey.squeeze(-1).long()
+
+        pos_obst, r_obst = state.obst_state.split((2, 1), dim=-1)
         r_obst = (r_obst - 0.8) / 0.7
         pos_obst /= 9.
 
-        x_pred = self.embedding[:, 0].repeat((B, pos_pred.size(1), 1))
-        x_prey = self.embedding[:, 1].repeat((B, pos_prey.size(1), 1))
-        x_obst = self.obst_embedding(r_obst)
+        # print(is_alive_prey, is_alive_prey.size(), self.embedding(is_alive_prey).size())
+        # print(self.embedding.weight[:, 3].repeat(B, pos_prey.size(1), 1).size())
+        x_pred = self.embedding.weight[2].repeat((B, pos_pred.size(1), 1))
+        x_prey = self.embedding.weight[3].repeat((B, pos_prey.size(1), 1)) + self.embedding(is_alive_prey)
+        x_obst = self.embedding.weight[4].repeat((B, pos_obst.size(1), 1)) + self.obst_embedding(r_obst)
 
         out = self.conv1(x_pred, x_prey, x_obst, pos_pred, pos_prey, pos_obst)[self.entity_idx]
 
         # out = self.conv2(x_pred, x_prey, x_obst, x_pred, x_prey, x_obst)[self.entity_idx]
 
-        out = self.net(out)
+        out = self.net.seq(out)
 
+        out = torch.atan2(*out.permute(2, 0, 1)).unsqueeze(-1)
+        out /= math.pi
         return out
 
