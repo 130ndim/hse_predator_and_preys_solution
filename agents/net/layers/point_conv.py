@@ -2,7 +2,7 @@ from typing import Tuple
 
 import torch
 from torch import Tensor, nn
-from torch.nn import Sequential as Seq, Linear as Lin, Conv2d, ReLU
+from torch.nn import Sequential as Seq, Linear as Lin, Conv2d, ReLU, init
 
 AGGRS = {
     'min': lambda x: torch.min(x, dim=-2)[0],
@@ -15,13 +15,19 @@ AGGRS = {
 class PointConv(nn.Module):
     def __init__(self, hidden_size, pos_size: int = 2, aggrs=('min', 'max', 'mean')):
         super().__init__()
-        self.lin = Lin(hidden_size, hidden_size)
-        self.act = nn.ELU()
-
         self.aggrs = [AGGRS[aggr] for aggr in aggrs]
 
         self.nn1 = Seq(Lin(hidden_size + pos_size, hidden_size * 2), ReLU(), Lin(hidden_size * 2, hidden_size))
         self.nn2 = Seq(Lin(hidden_size * len(aggrs), hidden_size * 2), ReLU(), Lin(hidden_size * 2, hidden_size))
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for n, p in list(self.nn1.named_parameters()) + list(self.nn2.named_parameters()):
+            if 'weight' in n:
+                init.xavier_uniform_(p)
+            elif 'bias' in n:
+                init.zeros_(p)
 
     def forward(
             self,

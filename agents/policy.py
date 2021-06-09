@@ -19,9 +19,9 @@ from utils.buffer import State
 @dataclass
 class ActorConfig:
     input_size: Union[int, Tuple[int, int, int]] = (2, 2, 3)
-    hidden_sizes: Sequence[int] = (64, 64, 64)
+    hidden_sizes: Sequence[int] = (256, 256, 256)
 
-    lr: float = 3e-4
+    lr: float = 1e-3
 
     entity: Optional[Literal['predator', 'prey']] = None
 
@@ -83,13 +83,19 @@ class PCActor(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.embedding.data.normal_()
+        nn.init.xavier_normal_(self.embedding)
+        nn.init.xavier_normal_(self.obst_embedding.weight)
+        nn.init.zeros_(self.obst_embedding.bias)
+        self.conv1.reset_parameters()
+        self.net.reset_parameters()
+        self.net.seq[-2].weight.data.uniform_(-1e-2, 1e-2)
 
     def forward(self, state: State):
         B = state.pred_state.size(0)
         pos_pred, pos_prey = state.pred_state / 9., state.prey_state / 9.
         pos_obst, r_obst = state.obst_state.split((2, 1), dim=-1)
 
+        r_obst = (r_obst - 0.8) / 0.7
         pos_obst /= 9.
 
         x_pred = self.embedding[:, 0].repeat((B, pos_pred.size(1), 1))

@@ -47,9 +47,9 @@ if __name__ == '__main__':
     #                          entity='prey')
 
     env = PredatorsAndPreysEnv(render=True)
-    predator_agent = DDPGAgent.from_ckpt('./ddpg_pred_150000.pt', map_location='cpu')
+    predator_agent = DDPGAgent().from_ckpt('./ddpg_pred_100000.pt', map_location='cpu')
     predator_agent.eval()
-    prey_agent = DDPGAgent.from_ckpt('./ddpg_prey_150000.pt', map_location='cpu')
+    prey_agent = DDPGAgent().from_ckpt('./ddpg_prey_100000.pt', map_location='cpu')
     prey_agent.eval()
 
     print(evaluate_policy(env, predator_agent, prey_agent))

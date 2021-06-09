@@ -51,11 +51,14 @@ class DDPGAgent(Agent):
 
     def __init__(self, config: DDPGConfig = DDPGConfig()):
         self.config = config
-        self.actor = GNNActor(config.actor)
+        self.actor = PCActor(config.actor)
         self.target_actor = deepcopy(self.actor)
 
-        self.critic = GNNCritic(config.critic)
+        self.critic = PCCritic(config.critic)
         self.target_critic = deepcopy(self.critic)
+
+        print('Actor:\n', self.actor)
+        print('Critic:\n', self.critic)
 
         self.actor_optim = Adam(self.actor.parameters(), lr=config.actor.lr)
         self.critic_optim = Adam(self.critic.parameters(), lr=config.critic.lr)

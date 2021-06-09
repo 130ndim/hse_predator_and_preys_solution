@@ -18,9 +18,9 @@ from utils.buffer import State
 @dataclass
 class CriticConfig:
     input_size: Union[int, Tuple[int, int, int]] = 3
-    hidden_sizes: Sequence[int] = (64, 64)
+    hidden_sizes: Sequence[int] = (256, 256, 256)
 
-    lr: float = 3e-4
+    lr: float = 1e-3
 
     entity: Optional[Literal['predator', 'prey']] = None
 
@@ -49,7 +49,7 @@ class GNNCritic(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.net.seq[-1].weight.data.uniform_(-3e-3, 3e-3)
+        self.net.seq[-1].weight.data.uniform_(1e-2, 1e-2)
 
     def forward(self, state: State, action: Tensor):
         pred_state, prey_state, obst_state = state.pred_state, state.prey_state, state.obst_state
@@ -92,13 +92,21 @@ class PCCritic(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.embedding.data.normal_()
-        self.net.seq[-1].weight.data.uniform_(-3e-3, 3e-3)
+        nn.init.xavier_normal_(self.embedding, 0.1)
+        nn.init.xavier_normal_(self.obst_embedding.weight, 0.1)
+        nn.init.zeros_(self.obst_embedding.bias)
+        nn.init.xavier_normal_(self.action_embedding.weight, 0.1)
+        nn.init.zeros_(self.action_embedding.bias)
+        self.conv1.reset_parameters()
+        self.net.reset_parameters()
+        self.net.seq[-1].weight.data.uniform_(-3e-2, 3e-2)
 
     def forward(self, state: State, action: Tensor):
         B = state.pred_state.size(0)
         pos_pred, pos_prey = state.pred_state / 9., state.prey_state / 9.
         pos_obst, r_obst = state.obst_state.split((2, 1), dim=-1)
+
+        r_obst = (r_obst - 0.8) / 0.7
         pos_obst /= 9.
 
         x_action = self.action_embedding(action)
