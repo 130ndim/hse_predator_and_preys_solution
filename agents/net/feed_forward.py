@@ -12,10 +12,10 @@ class FFN(nn.Module):
         seq = []
         for in_, out_ in zip(hidden_sizes[:-2], hidden_sizes[1:-1]):
             if layer_norm:
-                seq += [nn.LayerNorm(in_, elementwise_affine=True)]
+                seq += [nn.LayerNorm(in_, elementwise_affine=False)]
             seq += [nn.Linear(in_, out_), act]
         if layer_norm:
-            seq += [nn.LayerNorm(hidden_sizes[-2], elementwise_affine=True)]
+            seq += [nn.LayerNorm(hidden_sizes[-2], elementwise_affine=False)]
         seq += [nn.Linear(hidden_sizes[-2], hidden_sizes[-1])]
 
         self.seq = nn.Sequential(*seq)

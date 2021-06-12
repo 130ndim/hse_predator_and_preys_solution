@@ -76,10 +76,9 @@ class TD3Agent(Agent):
     @torch.no_grad()
     def act(self, state):
         state = state2tensor(state).to(self.device)
-        action = self.actor.get_components(state).squeeze().cpu().numpy()
+        action = self.actor(state).squeeze().cpu().numpy()
         if self._training or self.add_noise_on_inference:
             action = self.noise(action).clip(-1., 1.)
-        action = np.arctan2(*action.T)
         return np.clip(action, -1., 1.)
 
     def train(self):

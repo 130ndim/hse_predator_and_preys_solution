@@ -5,7 +5,7 @@ from typing_extensions import Literal
 
 import torch
 from torch import Tensor, nn
-from torch.nn import Sequential as Seq, Linear as Lin, LeakyReLU as LReLU
+from torch.nn import Sequential as Seq, Linear as Lin, LeakyReLU as LReLU, init
 
 from torch_geometric.nn import NNConv
 
@@ -32,12 +32,12 @@ class PredatorCritic(nn.Module):
         self.entity_embedding = nn.Embedding(3, config.hidden_sizes[0])
 
         self.edge_type_embedding = nn.Embedding(10, 10)
-        self.action_embedding = FFN([1] + [config.hidden_sizes[0]], layer_norm=False)
+        self.action_embedding = FFN([1] + [config.hidden_sizes[0]] * 2, layer_norm=False)
 
         self.conv1 = NNConv(
             config.hidden_sizes[0],
             config.hidden_sizes[0],
-            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=True),
+            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=False),
             aggr='mean'
         )
 
@@ -53,8 +53,12 @@ class PredatorCritic(nn.Module):
         nn.init.xavier_normal_(self.edge_type_embedding.weight)
         nn.init.xavier_normal_(self.entity_embedding.weight)
         self.conv1.reset_parameters()
+        for m in self.conv1.nn.modules():
+            if isinstance(m, Lin):
+                init.xavier_uniform_(m.weight, 0.01)
+                init.zeros_(m.bias)
         self.net.reset_parameters()
-        self.net.seq[-2].weight.data.uniform_(-1e-2, 1e-2)
+        self.net.seq[-1].weight.data.uniform_(-0.01, 0.01)
 
     def forward(self, state, action):
         x = state.x
@@ -85,12 +89,12 @@ class PreyCritic(nn.Module):
         self.entity_embedding = nn.Embedding(3, config.hidden_sizes[0])
 
         self.edge_type_embedding = nn.Embedding(10, 10)
-        self.action_embedding = FFN([1] + [config.hidden_sizes[0]], layer_norm=False)
+        self.action_embedding = FFN([1] + [config.hidden_sizes[0]] * 2, layer_norm=False)
 
         self.conv1 = NNConv(
             config.hidden_sizes[0],
             config.hidden_sizes[0],
-            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=True),
+            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=False),
             aggr='mean'
         )
 
@@ -106,8 +110,12 @@ class PreyCritic(nn.Module):
         nn.init.xavier_normal_(self.edge_type_embedding.weight)
         nn.init.xavier_normal_(self.entity_embedding.weight)
         self.conv1.reset_parameters()
+        for m in self.conv1.nn.modules():
+            if isinstance(m, Lin):
+                init.xavier_uniform_(m.weight, 0.01)
+                init.zeros_(m.bias)
         self.net.reset_parameters()
-        self.net.seq[-2].weight.data.uniform_(-1e-2, 1e-2)
+        self.net.seq[-1].weight.data.uniform_(-0.01, 0.01)
 
     def forward(self, state, action):
         x = state.x

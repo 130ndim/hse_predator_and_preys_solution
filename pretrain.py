@@ -105,20 +105,14 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
             pred_action = torch.cat(pred_actions).view(-1, 1).to(device)
             prey_action = torch.cat(prey_actions).view(-1, 1).to(device)
 
-            pred_action *= math.pi
-            prey_action *= math.pi
-
-            pred_action = torch.cat([pred_action.sin(), pred_action.cos()], dim=1)
-            prey_action = torch.cat([prey_action.sin(), prey_action.cos()], dim=1)
-
-            pred_comps = predator_actor.get_components(state)
+            pred_comps = predator_actor(state)
             pred_optim.zero_grad()
             pred_loss = F.mse_loss(pred_comps, pred_action)
             pred_loss.backward()
             pred_optim.step()
             pred_scheduler.step()
 
-            prey_comps = prey_actor.get_components(state)
+            prey_comps = prey_actor(state)
 
             prey_optim.zero_grad()
             prey_loss = F.mse_loss(prey_comps, prey_action)
@@ -126,7 +120,7 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
             prey_optim.step()
             prey_scheduler.step()
 
-            res = {'pred_mae': pred_loss.item(), 'prey_mae': prey_loss.item()}
+            res = {'pred_mse': pred_loss.item(), 'prey_mse': prey_loss.item()}
             bar.set_postfix(res)
 
             batch = []
@@ -149,6 +143,6 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
 
 
 if __name__ == '__main__':
-    prey_config = ActorConfig()
-    predator_config = ActorConfig()
+    prey_config = ActorConfig(entity='prey')
+    predator_config = ActorConfig(entity='predator')
     pretrain(prey_config, predator_config)
