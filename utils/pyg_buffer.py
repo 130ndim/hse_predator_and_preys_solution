@@ -27,7 +27,7 @@ def state2tensor(dict_, normalize=True):
 
     pd_size, py_size, ot_size = len(dict_['predators']), len(dict_['preys']), len(dict_['obstacles'])
     is_dead_mask = torch.cat([torch.zeros(pd_size, dtype=torch.bool), ~prey_is_alive, torch.zeros(ot_size, dtype=torch.bool)])
-    mask = torch.tensor([0] * pd_size + [1] * py_size + [2] * ot_size, dtype=torch.int)
+    mask = torch.tensor([0] * pd_size + [1] * py_size + [2] * ot_size, dtype=torch.long)
     E = mask.view(-1, 1) + mask
     E[pd_size:, pd_size:] += 1
     E += 1
