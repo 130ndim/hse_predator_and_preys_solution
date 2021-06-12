@@ -10,9 +10,9 @@ import torch
 from torch.nn import functional as F, utils
 from torch.optim import Adam
 
-from . import Agent, GNNActor, PCActor, ActorConfig, GNNCritic, CriticConfig, PCCritic
+from . import Agent, ActorConfig, CriticConfig, PreyActor, PreyCritic, PredatorActor, PredatorCritic
 from .utils import soft_update, ZeroCenteredNoise, OUNoise
-from utils.buffer import Batch, State
+from ..utils.buffer import Batch, State
 
 
 def make_state(dict_, device):
@@ -56,10 +56,10 @@ class DDPGAgent(Agent):
 
     def __init__(self, config: DDPGConfig = DDPGConfig()):
         self.config = config
-        self.actor = PCActor(config.actor)
+        self.actor = PreyActor(config.actor)
         self.target_actor = deepcopy(self.actor)
 
-        self.critic = PCCritic(config.critic)
+        self.critic = PreyCritic(config.critic)
         self.target_critic = deepcopy(self.critic)
 
         print('Actor:\n', self.actor)
