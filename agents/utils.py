@@ -1,7 +1,19 @@
 import numpy as np
 
 import torch
-from torch.nn import Module
+from torch.nn import Module, LayerNorm, Linear, Conv2d, init
+
+
+def reset(seq):
+    for m in seq.modules():
+        if isinstance(m, (Linear, Conv2d)):
+            init.kaiming_uniform_(m.weight, a=0.1)
+            init.zeros_(m.bias)
+        if isinstance(m, LayerNorm):
+            if m.weight is not None:
+                init.normal_(m.weight, mean=1., std=0.01)
+            if m.bias is not None:
+                init.zeros_(m.bias)
 
 
 def soft_update(target: Module, source: Module, tau: float) -> None:
