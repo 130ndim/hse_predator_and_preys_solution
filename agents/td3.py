@@ -13,7 +13,7 @@ from torch.optim import Adam
 from . import Agent, ActorConfig, CriticConfig, PredatorActor, PreyActor, PredatorCritic, PreyCritic, \
     PredatorAttnActor, PreyAttnActor, PredatorAttnCritic, PreyAttnCritic
 from .utils import soft_update, ZeroCenteredNoise, OUNoise
-from ..utils.faster_buffer import Batch, state2tensor
+from utils.faster_buffer import Batch, state2tensor
 
 
 @dataclass

@@ -12,7 +12,7 @@ from torch.optim import Adam
 
 from . import Agent, ActorConfig, CriticConfig, PreyActor, PreyCritic, PredatorActor, PredatorCritic
 from .utils import soft_update, ZeroCenteredNoise, OUNoise
-from ..utils.buffer import Batch, State
+from utils.buffer import Batch, State
 
 
 def make_state(dict_, device):
