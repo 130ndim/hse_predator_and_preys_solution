@@ -10,25 +10,11 @@ import torch
 from torch.nn import functional as F, utils
 from torch.optim import Adam
 
-from . import Agent, GNNActor, PCActor, ActorConfig, GNNCritic, CriticConfig, PCCritic
+from . import Agent
+from .pyg import ActorConfig, PredatorActor, PreyActor, CriticConfig, PredatorCritic, \
+    PreyCritic
 from .utils import soft_update, ZeroCenteredNoise, OUNoise
-from utils.buffer import Batch, State
-
-
-def make_state(dict_, device):
-    pred_state = torch.tensor(
-        [[obj['x_pos'], obj['y_pos']] for obj in dict_['predators']],
-        dtype=torch.float, device=device
-    ).unsqueeze(0)
-    prey_state = torch.tensor(
-        [[obj['x_pos'], obj['y_pos'], obj['is_alive']] for obj in dict_['preys']],
-        dtype=torch.float, device=device
-    ).unsqueeze(0)
-    obst_state = torch.tensor(
-        [[obj['x_pos'], obj['y_pos'], obj['radius']] for obj in dict_['obstacles']],
-        dtype=torch.float, device=device
-    ).unsqueeze(0)
-    return State(pred_state, prey_state, obst_state)
+from utils.pyg_buffer import PyGBatch, state2tensor
 
 
 @dataclass
@@ -42,8 +28,7 @@ class DDPGConfig:
     gamma: float = 0.99
     tau: float = 0.995
 
-    soft_update_freq: int = 50
-    actor_update_freq: int = 50
+    policy_update_freq: int = 20
 
     bar: bool = True
 
@@ -56,10 +41,13 @@ class DDPGAgent(Agent):
 
     def __init__(self, config: DDPGConfig = DDPGConfig()):
         self.config = config
-        self.actor = PCActor(config.actor)
+        _actor_class = PredatorActor if config.entity == 'predator' else PreyActor
+        _critic_class = PredatorCritic if config.entity == 'predator' else PreyCritic
+
+        self.actor = _actor_class(config.actor)
         self.target_actor = deepcopy(self.actor)
 
-        self.critic = PCCritic(config.critic)
+        self.critic = _critic_class(config.critic)
         self.target_critic = deepcopy(self.critic)
 
         print('Actor:\n', self.actor)
@@ -79,10 +67,12 @@ class DDPGAgent(Agent):
 
     @torch.no_grad()
     def act(self, state):
-        state = make_state(state, self.device)
-        action = self.actor(state).squeeze().cpu().numpy()
+        state = state2tensor(state).to(self.device)
+        action = self.actor.get_components(state).squeeze().cpu().numpy()
         if self._training or self.add_noise_on_inference:
-            action = self.noise(action)
+            action = self.noise(action).clip(-1., 1.)
+        action = np.arctan2(*action.T)
+        # return (action + 1) % 2 - 1
         return np.clip(action, -1., 1.)
 
     def train(self):
@@ -91,26 +81,27 @@ class DDPGAgent(Agent):
     def eval(self):
         self._training = False
 
-    def update(self, batch: Batch):
+    def update(self, batch: PyGBatch):
         self._step += 1
 
         state, action, next_state, reward, done = batch.to(self.device)
+        batch_, mask = batch.state.batch, batch.state.mask
+        B = batch_.max() + 1
 
         with torch.no_grad():
             next_action = self.target_actor(next_state)
-            ns_action_values = self.target_critic(next_state, next_action)
-            Q_target = reward + self.config.gamma * ns_action_values * (1 - done).view(-1, 1, 1)
+            Q_target = self.target_critic(next_state, next_action).view(B, -1)
+            Q_target = reward + self.config.gamma * Q_target * (1 - done)
 
-        Q_est = self.critic(state, action)
+        Q_est = self.critic(state, action).view(B, -1)
 
         self.critic_optim.zero_grad()
         value_loss = F.mse_loss(Q_est, Q_target)
         value_loss.backward()
-        utils.clip_grad_norm_(self.critic.parameters(), self.config.critic.max_grad_norm)
         self.critic_optim.step()
         losses = {'v_loss': value_loss.item(), 'p_loss': np.nan}
 
-        if self._step % self.config.actor_update_freq == 0:
+        if self._step % self.config.policy_update_freq == 0:
             self.actor_optim.zero_grad()
             policy_loss = -torch.mean(self.critic(state, self.actor(state)))
             policy_loss.backward()
@@ -118,7 +109,6 @@ class DDPGAgent(Agent):
             self.actor_optim.step()
             losses['p_loss'] = policy_loss.item()
 
-        if self._step % self.config.soft_update_freq == 0:
             soft_update(self.target_actor, self.actor, self.config.tau)
             soft_update(self.target_critic, self.critic, self.config.tau)
 
