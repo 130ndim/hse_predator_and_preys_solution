@@ -10,10 +10,11 @@ import torch
 from torch.nn import functional as F, ModuleList
 from torch.optim import Adam
 
-from . import Agent, ActorConfig, CriticConfig, PredatorActor, PreyActor, PredatorCritic, PreyCritic, \
-    PredatorAttnActor, PreyAttnActor, PredatorAttnCritic, PreyAttnCritic
+from . import Agent
+from .pyg import ActorConfig, PredatorActor, PreyActor, CriticConfig, PredatorCritic, \
+    PreyCritic
 from .utils import soft_update, ZeroCenteredNoise, OUNoise
-from utils.faster_buffer import Batch, state2tensor
+from utils.pyg_buffer import PyGBatch, state2tensor
 
 
 @dataclass
@@ -43,8 +44,8 @@ class TD3Agent(Agent):
 
     def __init__(self, config: TD3Config = TD3Config()):
         self.config = config
-        _actor_class = PredatorAttnActor if config.entity == 'predator' else PreyAttnActor
-        _critic_class = PredatorAttnCritic if config.entity == 'predator' else PreyAttnCritic
+        _actor_class = PredatorActor if config.entity == 'predator' else PreyActor
+        _critic_class = PredatorCritic if config.entity == 'predator' else PreyCritic
 
         self.actor = _actor_class(config.actor)
         self.target_actor = deepcopy(self.actor)
@@ -62,7 +63,7 @@ class TD3Agent(Agent):
 
         self.add_noise_on_inference = config.add_noise_on_inference
 
-        self._entity = config.entity
+        self._entity = int(config.entity == 'prey')
         self._step = 0
 
         self._training = True
@@ -73,12 +74,13 @@ class TD3Agent(Agent):
 
     @torch.no_grad()
     def act(self, state):
-        state = map(lambda x: x.unsqueeze(0).to(self.device), state2tensor(state))
-        action = self.actor(*state).squeeze().cpu().numpy()
+        state = state2tensor(state).to(self.device)
+        action = self.actor.get_components(state).squeeze().cpu().numpy()
         if self._training or self.add_noise_on_inference:
-            action = self.noise(action)
-        return (action + 1) % 2 - 1
-        # return np.clip(action, -1., 1.)
+            action = self.noise(action).clip(-1., 1.)
+        action = np.arctan2(*action.T)
+        # return (action + 1) % 2 - 1
+        return np.clip(action, -1., 1.)
 
     def train(self):
         self._training = True
@@ -86,36 +88,29 @@ class TD3Agent(Agent):
     def eval(self):
         self._training = False
 
-    def update(self, batch: Batch):
+    def update(self, batch: PyGBatch):
         self._step += 1
 
-        (pred_state, prey_state, prey_is_alive_state, obst_state, action, pred_next_state, prey_next_state,
-         prey_is_alive_next_state, obst_next_state, reward, done) = batch.to(self.device)
+        state, action, next_state, reward, done = batch.to(self.device)
+        batch_, mask = batch.state.batch, batch.state.mask
+        B = batch_.max() + 1
 
         with torch.no_grad():
-
             noise = (
                     torch.randn_like(action) * self.config.policy_noise
             ).clamp(-self.config.noise_clip, self.config.noise_clip)
-            next_action = (self.target_actor(
-                pred_next_state, prey_next_state, obst_next_state, prey_is_alive_next_state
-            ) + noise).clamp(-1., 1.)
+            next_action = (self.target_actor(next_state) + noise).clamp(-1., 1.)
 
-            Q1_target = self.target_critic[0](
-                pred_next_state, prey_next_state, obst_next_state, prey_is_alive_next_state, next_action
-            )
-            Q2_target = self.target_critic[1](
-                pred_next_state, prey_next_state, obst_next_state, prey_is_alive_next_state, next_action
-            )
+            Q1_target = self.target_critic[0](next_state, next_action)
+            Q2_target = self.target_critic[1](next_state, next_action)
 
-            done = done.view(-1, 1, 1)
-            Q_target = torch.minimum(Q1_target, Q2_target)
+            Q_target = torch.minimum(Q1_target, Q2_target).view(B, -1)
 
             # print(reward.unsqueeze(-1).size(), Q_target.size(), (1 - done).size())
-            Q_target = reward.unsqueeze(-1) + self.config.gamma * Q_target * (1 - done)
+            Q_target = reward.view(B, -1) + self.config.gamma * Q_target * (1 - done)
 
-        Q1_est = self.critic[0](pred_state, prey_state, obst_state, prey_is_alive_state, action)
-        Q2_est = self.critic[1](pred_state, prey_state, obst_state, prey_is_alive_state, action)
+        Q1_est = self.critic[0](state, action).view(B, -1)
+        Q2_est = self.critic[1](state, action).view(B, -1)
         # print(Q1_est.size())
         # print(Q1_est.size())
         self.critic_optim.zero_grad()
@@ -126,13 +121,7 @@ class TD3Agent(Agent):
 
         if self._step % self.config.policy_update_freq == 0:
             self.actor_optim.zero_grad()
-            policy_loss = self.critic[0](
-                pred_state, prey_state, obst_state, prey_is_alive_state,
-                self.actor(pred_state, prey_state, obst_state, prey_is_alive_state)
-            )
-            if self.entity == 'prey':
-                policy_loss = policy_loss[prey_is_alive_state]
-            policy_loss = -torch.mean(policy_loss)
+            policy_loss = -torch.mean(self.critic[0](state, self.actor(state)))
             policy_loss.backward()
             self.actor_optim.step()
             losses['p_loss'] = policy_loss.item()

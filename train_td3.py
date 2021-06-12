@@ -12,7 +12,7 @@ from tqdm.auto import tqdm
 from agents.td3 import TD3Agent, TD3Config
 from agents import CriticConfig, ActorConfig
 
-from utils.faster_buffer import FasterBuffer
+from utils.pyg_buffer import FasterBuffer
 from utils import Penalty
 from predators_and_preys_env.env import PredatorsAndPreysEnv
 
