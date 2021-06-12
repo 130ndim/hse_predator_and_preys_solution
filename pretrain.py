@@ -11,14 +11,16 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import StepLR
 from torch.nn import functional as F
 
+from torch_geometric.data import Batch
+
 from tqdm.auto import tqdm
 
 from examples.simple_chasing_agents.agents import ChasingPredatorAgent
 from examples.simple_chasing_agents.agents import FleeingPreyAgent
 import time
 
-from agents.policy import PreyAttnActor, PredatorAttnActor, ActorConfig
-from utils.faster_buffer import state2tensor
+from agents.pyg import ActorConfig, PreyActor, PredatorActor
+from utils.pyg_buffer import state2tensor
 
 import argparse
 
@@ -42,9 +44,9 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
              prey_teacher=FleeingPreyAgent(),
              predator_teacher=ChasingPredatorAgent()):
 
-    prey_actor = PreyAttnActor(prey_config)
+    prey_actor = PreyActor(prey_config)
     print(prey_actor)
-    predator_actor = PredatorAttnActor(predator_config)
+    predator_actor = PredatorActor(predator_config)
     print(predator_actor)
     device = torch.device(args.device)
     env = PredatorsAndPreysEnv(render=False)
@@ -58,6 +60,8 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
     predator_actor.to(device)
 
     batch = []
+    pred_actions = []
+    prey_actions = []
 
     bar = tqdm(total=args.n_steps)
 
@@ -73,9 +77,10 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
 
         pred_action = predator_teacher.act(state_dict)
         prey_action = prey_teacher.act(state_dict)
-        batch.append(list(state2tensor(state_dict)) +
-                     [torch.tensor(pred_action, dtype=torch.float),
-                      torch.tensor(prey_action, dtype=torch.float)])
+
+        batch.append(state2tensor(state_dict))
+        pred_actions.append(torch.tensor(pred_action, dtype=torch.float))
+        prey_actions.append(torch.tensor(prey_action, dtype=torch.float))
         # evaluate_batch.append(list(state2tensor(state_dict)) +
         #                       [torch.tensor(pred_action, dtype=torch.float),
         #                        torch.tensor(prey_action, dtype=torch.float)])
@@ -95,20 +100,28 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
         #     bar.set_description({'pred_error': pred_error / 100, 'prey_error': prey_error / 100})
 
         if len(batch) == args.batch_size:
-            pred_state, prey_state, obst_state, prey_is_alive, pred_action, prey_action = \
-                [torch.stack(x, dim=0).to(device) for x in zip(*batch)]
+            state = Batch.from_data_list(batch).to(device)
 
-            pred_comps = predator_actor(pred_state, prey_state, obst_state, prey_is_alive).squeeze()
+            pred_action = torch.cat(pred_actions).view(-1, 1).to(device)
+            prey_action = torch.cat(prey_actions).view(-1, 1).to(device)
+
+            pred_action *= math.pi
+            prey_action *= math.pi
+
+            pred_action = torch.cat([pred_action.sin(), pred_action.cos()], dim=1)
+            prey_action = torch.cat([prey_action.sin(), prey_action.cos()], dim=1)
+
+            pred_comps = predator_actor.get_components(state)
             pred_optim.zero_grad()
-            pred_loss = F.l1_loss(pred_comps, pred_action)
+            pred_loss = F.mse_loss(pred_comps, pred_action)
             pred_loss.backward()
             pred_optim.step()
             pred_scheduler.step()
 
-            prey_comps = prey_actor(pred_state, prey_state, obst_state, prey_is_alive).squeeze()
+            prey_comps = prey_actor.get_components(state)
 
             prey_optim.zero_grad()
-            prey_loss = F.l1_loss(prey_comps, prey_action)
+            prey_loss = F.mse_loss(prey_comps, prey_action)
             prey_loss.backward()
             prey_optim.step()
             prey_scheduler.step()
@@ -117,6 +130,9 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
             bar.set_postfix(res)
 
             batch = []
+            pred_actions = []
+            prey_actions = []
+
             step_count += 1
             bar.update(1)
             if step_count % 1000 == 0:

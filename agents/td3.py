@@ -14,7 +14,8 @@ from . import Agent
 from .pyg import ActorConfig, PredatorActor, PreyActor, CriticConfig, PredatorCritic, \
     PreyCritic
 from .utils import soft_update, ZeroCenteredNoise, OUNoise
-from ..utils.pyg_buffer import PyGBatch, state2tensor
+from utils.pyg_buffer import PyGBatch, state2tensor
+
 
 
 @dataclass
@@ -79,7 +80,6 @@ class TD3Agent(Agent):
         if self._training or self.add_noise_on_inference:
             action = self.noise(action).clip(-1., 1.)
         action = np.arctan2(*action.T)
-        # return (action + 1) % 2 - 1
         return np.clip(action, -1., 1.)
 
     def train(self):

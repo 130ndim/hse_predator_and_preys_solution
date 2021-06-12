@@ -38,7 +38,8 @@ class PredatorActor(nn.Module):
         self.conv1 = NNConv(
             config.hidden_sizes[0],
             config.hidden_sizes[0],
-            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=False)
+            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=True),
+            aggr='mean'
         )
 
         self.act = LReLU(0.1)
@@ -97,7 +98,8 @@ class PreyActor(nn.Module):
         self.conv1 = NNConv(
             config.hidden_sizes[0],
             config.hidden_sizes[0],
-            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=False)
+            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=True),
+            aggr='mean'
         )
 
         self.act = LReLU(0.1)

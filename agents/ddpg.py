@@ -14,7 +14,7 @@ from . import Agent
 from .pyg import ActorConfig, PredatorActor, PreyActor, CriticConfig, PredatorCritic, \
     PreyCritic
 from .utils import soft_update, ZeroCenteredNoise, OUNoise
-from ..utils.pyg_buffer import PyGBatch, state2tensor
+from utils.pyg_buffer import PyGBatch, state2tensor
 
 
 @dataclass

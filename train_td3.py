@@ -26,9 +26,34 @@ parser.add_argument('-ckpt_save_path', '--ckpt_save_path', dest='ckpt_save_path'
 parser.add_argument('-penalize_deadlocks', '--penalize_deadlocks', dest='penalize_deadlocks',
                     action='store_true', default=False)
 parser.add_argument('-buffer_steps', '--buffer_steps', dest='buffer_steps', type=int, default=50000)
+parser.add_argument('-n_preds', '--n_preds', dest='n_preds', type=int, default=2)
+parser.add_argument('-n_preys', '--n_preys', dest='n_preys', type=int, default=5)
+parser.add_argument('-n_obsts', '--n_obsts', dest='n_obsts', type=int, default=10)
 parser.add_argument('-prey_ckpt', '--prey_ckpt', dest='prey_ckpt', type=str, default=None)
 parser.add_argument('-pred_ckpt', '--pred_ckpt', dest='pred_ckpt', type=str, default=None)
 args = parser.parse_args()
+
+
+CONFIG = {
+    "game": {
+        "num_obsts": args.n_obsts,
+        "num_preds": args.n_preds,
+        "num_preys": args.n_preys,
+        "x_limit": 9,
+        "y_limit": 9,
+        "obstacle_radius_bounds": [0.8, 1.5],
+        "prey_radius": 0.8,
+        "predator_radius": 1.0,
+        "predator_speed": 6.0,
+        "prey_speed": 9.0,
+        "world_timestep": 1/40,
+        "frameskip": 2
+    },
+    "environment": {
+        "frameskip": 2,
+        "time_limit": 1000
+    }
+}
 
 
 def evaluate_policy(env, predator_agent, prey_agent, episodes=5):
@@ -77,7 +102,7 @@ if __name__ == '__main__':
                             # tau=0.999,
                             )
 
-    env = PredatorsAndPreysEnv(render=False)
+    env = PredatorsAndPreysEnv(CONFIG, render=False)
     predator_agent = TD3Agent(predator_config).to(args.device)
     prey_agent = TD3Agent(prey_config).to(args.device)
 
