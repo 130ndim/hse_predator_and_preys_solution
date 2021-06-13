@@ -52,7 +52,7 @@ if __name__ == '__main__':
     #                          entity='prey')
     config = {
         "game": {
-            "num_obsts": 1,
+            "num_obsts": 10,
             "num_preds": 2,
             "num_preys": 5,
             "x_limit": 9,
@@ -72,6 +72,7 @@ if __name__ == '__main__':
     }
     env = PredatorsAndPreysEnv(config, render=True)
     predator_agent = DDPGAgent.from_ckpt('./pred_ddpg.pt', map_location='cpu')
+    # ckpt = torch.load('pred_pretr.pt')
     # predator_agent = TD3Agent(TD3Config(actor=ActorConfig(hidden_sizes=(256, 256, 256))))
 
     predator_agent.eval()

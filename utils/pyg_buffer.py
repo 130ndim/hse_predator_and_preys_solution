@@ -31,7 +31,11 @@ def state2tensor(dict_, normalize=True):
     E = mask.view(-1, 1) + mask
     E[pd_size:, pd_size:] += 1
     E += 1
-    E[is_dead_mask.view(-1, 1) & is_dead_mask] = 0
+    E[is_dead_mask.view(-1, 1) | is_dead_mask] = 0
+    # E[torch.eye(E.size(0), dtype=torch.bool)] = 0
+
+    # print(E)
+    # print(E.nonzero().size())
 
     edge_index = E.nonzero().T
     edge_attr = E[edge_index.tolist()]

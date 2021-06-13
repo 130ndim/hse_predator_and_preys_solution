@@ -10,7 +10,7 @@ import torch
 from tqdm.auto import tqdm
 
 from agents.td3 import TD3Agent, TD3Config
-from agents import CriticConfig, ActorConfig
+from agents.pyg import CriticConfig, ActorConfig, PreyActor, PredatorActor
 
 from utils.pyg_buffer import FasterBuffer
 from utils import Penalty
@@ -31,6 +31,8 @@ parser.add_argument('-n_preys', '--n_preys', dest='n_preys', type=int, default=5
 parser.add_argument('-n_obsts', '--n_obsts', dest='n_obsts', type=int, default=10)
 parser.add_argument('-prey_ckpt', '--prey_ckpt', dest='prey_ckpt', type=str, default=None)
 parser.add_argument('-pred_ckpt', '--pred_ckpt', dest='pred_ckpt', type=str, default=None)
+parser.add_argument('-prey_actor_ckpt', '--prey_actor_ckpt', dest='prey_actor_ckpt', type=str, default=None)
+parser.add_argument('-pred_actor_ckpt', '--pred_actor_ckpt', dest='pred_actor_ckpt', type=str, default=None)
 args = parser.parse_args()
 
 
@@ -109,9 +111,23 @@ if __name__ == '__main__':
     prey_agent = TD3Agent(prey_config).to(args.device)
 
     if args.pred_ckpt is not None:
-        predator_agent.actor.load_state_dict(args.pred_ckpt, map_location=args.device)
+        predator_agent = TD3Agent.from_ckpt(args.pred_ckpt, map_location=args.device)
     if args.prey_ckpt is not None:
-        prey_agent.actor.load_state_dict(args.prey_ckpt, map_location=args.device)
+        prey_agent = TD3Agent.from_ckpt(args.prey_ckpt, map_location=args.device)
+
+    if args.pred_actor_ckpt is not None:
+        ckpt = torch.load(args.pred_ckpt, map_location=args.device)
+        predator_agent.actor = PredatorActor(ckpt['config'])
+        predator_agent.actor.load_state_dict(ckpt['state_dict'])
+    if args.prey_actor_ckpt is not None:
+        ckpt = torch.load(args.prey_ckpt, map_location=args.device)
+        prey_agent.actor = PreyActor(ckpt['config'])
+        prey_agent.actor.load_state_dict(ckpt['state_dict'])
+
+
+    predator_agent.to(args.device)
+    prey_agent.to(args.device)
+
     print(next(predator_agent.actor.parameters()).device)
 
     buffer = FasterBuffer(buffer_size=1000000)
@@ -123,6 +139,8 @@ if __name__ == '__main__':
     state = env.reset()
     # buffer_bar = tqdm(total=buffer_steps)
     global_bar = tqdm(total=steps)
+
+    was_eval = False
 
     pred_loss = []
     prey_loss = []
@@ -149,6 +167,7 @@ if __name__ == '__main__':
                 prey_loss.append(prey_loss_)
                 for k, v in prey_loss_.items():
                     aggr_loss['prey_'+k].append(v)
+                was_eval = False
 
             predator_actions = predator_agent.act(state)
             prey_actions = prey_agent.act(state)
@@ -182,11 +201,12 @@ if __name__ == '__main__':
                 global_bar.set_postfix(losses)
                 aggr_loss = defaultdict(list)
 
-            if (update_step_count) % 10000 == 0:
+            if not was_eval and update_step_count % 10000 == 0:
                 mean, std = evaluate_policy(env, predator_agent, prey_agent)
                 rewards.append((mean, std))
                 global_bar.set_description(f'pred_r = {int(mean[0])}({int(std[0])}) | '
                                            f'prey_r = {int(mean[1])}({int(std[1])})')
+                was_eval = True
 
             if (update_step_count) % 5000 == 0:
                 predator_agent.save(osp.join(args.ckpt_save_path, f'td3_pred_{update_step_count}.pt'))

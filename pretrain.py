@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import StepLR
-from torch.nn import functional as F
+from torch.nn import functional as F, Softsign
 
 from torch_geometric.data import Batch
 
@@ -28,7 +28,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-device', '--device', dest='device', default='cpu')
 parser.add_argument('-batch_size', '--batch_size', dest='batch_size', type=int, default=128)
-parser.add_argument('-n_steps', '--n_steps', dest='n_steps', type=int, default=300000)
+parser.add_argument('-n_steps', '--n_steps', dest='n_steps', type=int, default=120000)
 parser.add_argument('-ckpt_save_path', '--ckpt_save_path', dest='ckpt_save_path', default='.', type=str)
 parser.add_argument('-lr', '--lr', dest='lr', default=1e-3, type=float)
 parser.add_argument('-wd', '--wd', dest='wd', default=1e-5, type=float)
@@ -39,7 +39,7 @@ args = parser.parse_args()
 #     return (math.pi * ((a1 - a2 + 1) % 2 - 1)).abs().sum()
 
 def angle_loss(x, y):
-    return torch.atan2(torch.sin(math.pi * (x - y)), torch.cos(math.pi * (x - y))).mean()
+    return torch.atan2(torch.sin(math.pi * (x - y)), torch.cos(math.pi * (x - y))).abs().mean()
 
 
 def pretrain(prey_config: ActorConfig = ActorConfig(),
@@ -48,16 +48,18 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
              predator_teacher=ChasingPredatorAgent()):
 
     prey_actor = PreyActor(prey_config)
+    prey_actor.net.seq[-1] = Softsign()
     print(prey_actor)
     predator_actor = PredatorActor(predator_config)
+    predator_actor.net.seq[-1] = Softsign()
     print(predator_actor)
     device = torch.device(args.device)
     env = PredatorsAndPreysEnv(render=False)
     pred_optim = AdamW(predator_actor.parameters(), lr=args.lr, weight_decay=args.wd)
     prey_optim = AdamW(prey_actor.parameters(), lr=args.lr, weight_decay=args.wd)
 
-    pred_scheduler = StepLR(pred_optim, step_size=100000)
-    prey_scheduler = StepLR(pred_optim, step_size=100000)
+    pred_scheduler = StepLR(pred_optim, step_size=40000)
+    prey_scheduler = StepLR(pred_optim, step_size=40000)
 
     prey_actor.to(device)
     predator_actor.to(device)
@@ -132,7 +134,7 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
 
             step_count += 1
             bar.update(1)
-            if step_count % 1000 == 0:
+            if step_count % 5000 == 0:
                 torch.save({'config': predator_config,
                             'state_dict': predator_actor.state_dict(),
                             'optim': pred_optim.state_dict()},

@@ -28,7 +28,7 @@ class DDPGConfig:
     gamma: float = 0.99
     tau: float = 0.995
 
-    policy_update_freq: int = 5
+    policy_update_freq: int = 12
 
     bar: bool = True
 
@@ -68,6 +68,7 @@ class DDPGAgent(Agent):
     @torch.no_grad()
     def act(self, state):
         state = state2tensor(state).to(self.device)
+        # print(state.edge_index)
         action = self.actor(state).squeeze().cpu().numpy()
         if self._training or self.add_noise_on_inference:
             action = self.noise(action)

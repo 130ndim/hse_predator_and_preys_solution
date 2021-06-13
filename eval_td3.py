@@ -5,7 +5,8 @@ import torch
 from tqdm.auto import tqdm
 
 from agents.td3 import TD3Agent, TD3Config
-from agents import CriticConfig, ActorConfig
+from agents.pyg import CriticConfig, ActorConfig, PreyActor, PredatorActor
+from agents.utils import OUNoise
 
 import os
 import os.path as osp
@@ -21,9 +22,10 @@ def evaluate_policy(env, predator_agent, prey_agent, episodes=5):
     predator_agent.eval()
     prey_agent.eval()
     returns = []
+    env = PredatorsAndPreysEnv(config, render=True)
     env.reset()
     for i in range(episodes):
-        env.seed(1000)
+        env.seed(10000 + i)
         done = False
         state = env.reset()
         # print(state)
@@ -52,7 +54,7 @@ if __name__ == '__main__':
     #                          entity='prey')
     config = {
         "game": {
-            "num_obsts": 10,
+            "num_obsts": 3,
             "num_preds": 2,
             "num_preys": 5,
             "x_limit": 9,
@@ -67,26 +69,28 @@ if __name__ == '__main__':
         },
         "environment": {
             "frameskip": 2,
-            "time_limit": 1000
+            "time_limit": 100
         }
     }
     env = PredatorsAndPreysEnv(config, render=True)
-    predator_agent = TD3Agent(TD3Config(entity='predator'))\
-        # .from_ckpt('./td3_pred_70000.pt', map_location='cpu')
+    predator_agent = TD3Agent.from_ckpt('./pred_td3.pt', map_location='cpu')
     # predator_agent = TD3Agent(TD3Config(actor=ActorConfig(hidden_sizes=(256, 256, 256))))
 
     predator_agent.eval()
-    # predator_agent.actor.load_state_dict(torch.load('pred_pretr.pt', map_location='cpu')['state_dict'])
-    print(predator_agent)
-    predator_agent.add_noise_on_inference = False
-    # predator_agent.noise.scale = 0.7
-    prey_agent = TD3Agent(TD3Config(entity='prey'))\
-        # .from_ckpt('./td3_prey_70000.pt', map_location='cpu')
+    ckpt = torch.load('./pred_pretr.pt', map_location='cpu')
+    predator_agent.actor = PreyActor(ckpt['config'])
+    predator_agent.actor.load_state_dict(ckpt['state_dict'])
+    predator_agent.add_noise_on_inference = True
+    predator_agent.noise = OUNoise()
+    # predator_agent.noise.scale = 0.5
+    prey_agent = TD3Agent.from_ckpt('./prey_td3.pt', map_location='cpu')
     # prey_agent = TD3Agent(TD3Config(actor=ActorConfig(hidden_sizes=(256, 256, 256))))
     prey_agent.eval()
-    # prey_agent.actor.load_state_dict(torch.load('prey_pretr.pt', map_location='cpu')['state_dict'])
+    ckpt = torch.load('./prey_pretr.pt', map_location='cpu')
+    prey_agent.actor = PreyActor(ckpt['config'])
+    prey_agent.actor.load_state_dict(ckpt['state_dict'])
     prey_agent.add_noise_on_inference = False
-    # prey_agent.noise.scale = 0.7
+    prey_agent.noise.scale = 0.7
     print(prey_agent.noise)
     for n, p in predator_agent.actor.net.seq.named_parameters():
         print(n, p)

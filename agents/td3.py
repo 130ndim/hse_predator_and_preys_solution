@@ -17,7 +17,6 @@ from .utils import soft_update, ZeroCenteredNoise, OUNoise
 from utils.pyg_buffer import PyGBatch, state2tensor
 
 
-
 @dataclass
 class TD3Config:
     actor: ActorConfig = ActorConfig()
@@ -29,7 +28,7 @@ class TD3Config:
     gamma: float = 0.99
     tau: float = 0.995
 
-    policy_update_freq: int = 5
+    policy_update_freq: int = 12
 
     policy_noise: float = 0.2
     noise_clip: float = 0.5
@@ -142,7 +141,7 @@ class TD3Agent(Agent):
         torch.save(state_dict, path)
 
     @classmethod
-    def from_ckpt(cls, ckpt_path, map_location=None):
+    def from_ckpt(cls, ckpt_path, map_location='cpu'):
         state_dict = torch.load(ckpt_path, map_location=map_location)
         step, config = state_dict.pop('step'), state_dict.pop('config')
 
