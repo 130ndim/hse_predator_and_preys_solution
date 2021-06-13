@@ -1,10 +1,26 @@
-import pathlib
-
-import sys
 import os.path as osp
+
+import pathlib
+import subprocess
+import sys
+
+import torch
+
+torch_version = torch.__version__.split('.')
+torch_version[-1] = '0'
+torch_version = '.'.join(torch_version)
+
+subprocess.check_call([sys.executable, "-m", "pip", "install", "torch-scatter",
+                       "-f", f"https://pytorch-geometric.com/whl/torch-${torch_version}+cpu.html"])
+subprocess.check_call([sys.executable, "-m", "pip", "install", "torch-sparse",
+                       "-f", f"https://pytorch-geometric.com/whl/torch-${torch_version}+cpu.html"])
+subprocess.check_call([sys.executable, "-m", "pip", "install", "torch-cluster",
+                       "-f", f"https://pytorch-geometric.com/whl/torch-${torch_version}+cpu.html"])
+subprocess.check_call([sys.executable, "-m", "pip", "install", "torch-geometric"])
 
 dirpath = pathlib.Path(__file__).parent
 sys.path.append(str(dirpath))
+
 
 from .agents.td3 import TD3Agent
 

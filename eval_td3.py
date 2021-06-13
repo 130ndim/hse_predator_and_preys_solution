@@ -78,15 +78,15 @@ if __name__ == '__main__':
     predator_agent.eval()
     # predator_agent.actor.load_state_dict(torch.load('pred_pretr.pt', map_location='cpu')['state_dict'])
     print(predator_agent)
-    # predator_agent.add_noise_on_inference = True
-    # predator_agent.noise.scale = 0.1
+    predator_agent.add_noise_on_inference = False
+    # predator_agent.noise.scale = 0.7
     prey_agent = TD3Agent(TD3Config(entity='prey'))\
         # .from_ckpt('./td3_prey_70000.pt', map_location='cpu')
     # prey_agent = TD3Agent(TD3Config(actor=ActorConfig(hidden_sizes=(256, 256, 256))))
     prey_agent.eval()
     # prey_agent.actor.load_state_dict(torch.load('prey_pretr.pt', map_location='cpu')['state_dict'])
-    # prey_agent.add_noise_on_inference = True
-    # prey_agent.noise.scale = 0.1
+    prey_agent.add_noise_on_inference = False
+    # prey_agent.noise.scale = 0.7
     print(prey_agent.noise)
     for n, p in predator_agent.actor.net.seq.named_parameters():
         print(n, p)

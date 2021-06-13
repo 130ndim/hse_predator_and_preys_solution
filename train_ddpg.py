@@ -81,6 +81,7 @@ if __name__ == '__main__':
     batch_size = 64
 
     loss_aggr_steps = 100
+    update_every = 50
 
     if args.penalize_deadlocks:
         penalty = Penalty()
@@ -112,9 +113,10 @@ if __name__ == '__main__':
         prey_agent.actor.load_state_dict(args.prey_ckpt, map_location=args.device)
     print(next(predator_agent.actor.parameters()).device)
 
-    buffer = FasterBuffer(buffer_size=400000)
+    buffer = FasterBuffer(buffer_size=1000000)
 
     global_step_count = 0
+    update_step_count = 0
     done = True
     step_count = 0
     state = env.reset()
@@ -134,15 +136,18 @@ if __name__ == '__main__':
             # buffer_bar.update(1)
         else:
             # buffer_bar.disable = True
-            pred_loss_ = predator_agent.update(buffer.get_batch(batch_size, 'predator'))
-            pred_loss.append(pred_loss_)
-            for k, v in pred_loss_.items():
-                aggr_loss['pred_'+k].append(v)
+            if global_step_count % update_every == 0:
+                global_bar.update(1)
+                update_step_count += 1
+                pred_loss_ = predator_agent.update(buffer.get_batch(batch_size, 'predator'))
+                pred_loss.append(pred_loss_)
+                for k, v in pred_loss_.items():
+                    aggr_loss['pred_'+k].append(v)
 
-            prey_loss_ = prey_agent.update(buffer.get_batch(batch_size, 'prey'))
-            prey_loss.append(prey_loss_)
-            for k, v in prey_loss_.items():
-                aggr_loss['prey_'+k].append(v)
+                prey_loss_ = prey_agent.update(buffer.get_batch(batch_size, 'prey'))
+                prey_loss.append(prey_loss_)
+                for k, v in prey_loss_.items():
+                    aggr_loss['prey_'+k].append(v)
 
             predator_actions = predator_agent.act(state)
             prey_actions = prey_agent.act(state)
@@ -168,27 +173,32 @@ if __name__ == '__main__':
 
         global_step_count += 1
 
-        global_bar.update(1)
         os.makedirs(args.ckpt_save_path, exist_ok=True)
         if global_step_count > args.buffer_steps:
 
-            if (global_step_count) % loss_aggr_steps == 0:
+            if len(aggr_loss) > 0 and len(next(iter(aggr_loss.values()))) == loss_aggr_steps:
                 losses = {k: np.nanmean(v) for k, v in aggr_loss.items()}
                 global_bar.set_postfix(losses)
                 aggr_loss = defaultdict(list)
 
-            if (global_step_count) % 20000 == 0:
+            if (update_step_count) % 10000 == 0:
                 mean, std = evaluate_policy(env, predator_agent, prey_agent)
                 rewards.append((mean, std))
                 global_bar.set_description(f'pred_r = {int(mean[0])}({int(std[0])}) | '
                                            f'prey_r = {int(mean[1])}({int(std[1])})')
 
-            if (global_step_count) % 5000 == 0:
-                predator_agent.save(osp.join(args.ckpt_save_path, f'ddpg_pred_{global_step_count}.pt'))
-                prey_agent.save(osp.join(args.ckpt_save_path, f'ddpg_prey_{global_step_count}.pt'))
+            if (update_step_count) % 5000 == 0:
+                predator_agent.save(osp.join(args.ckpt_save_path, f'ddpg_pred_{update_step_count}.pt'))
+                prey_agent.save(osp.join(args.ckpt_save_path, f'ddpg_prey_{update_step_count}.pt'))
 
-            if (global_step_count) % 200000 == 0:
+            if (update_step_count) % 200000 == 0:
                 torch.save(pred_loss, osp.join(args.ckpt_save_path, 'pred_loss.pt'))
                 torch.save(prey_loss, osp.join(args.ckpt_save_path, 'prey_loss.pt'))
                 torch.save(rewards, osp.join(args.ckpt_save_path, 'rewards.pt'))
+
+        if update_step_count == steps:
+            break
+
+    predator_agent.save(osp.join(args.ckpt_save_path, f'ddpg_pred_final.pt'))
+    prey_agent.save(osp.join(args.ckpt_save_path, f'ddpg_prey_final.pt'))
 

@@ -16,11 +16,11 @@ from ..utils import reset
 @dataclass
 class ActorConfig:
     input_size: Union[int, Tuple[int, int, int]] = (2, 2, 3)
-    hidden_sizes: Sequence[int] = (64, 64, 64)
+    hidden_sizes: Sequence[int] = (64, 512, 512)
 
     max_grad_norm: float = 0.5
 
-    lr: float = 3e-4
+    lr: float = 1e-3
 
     atan_trick: bool = False
 

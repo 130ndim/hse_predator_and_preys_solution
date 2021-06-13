@@ -53,7 +53,7 @@ class OUNoise:
 
 
 class ZeroCenteredNoise:
-    def __init__(self, sigma=0.3, decay=0.999, freq=100):
+    def __init__(self, sigma=0.6, decay=0.999, freq=100):
         self.sigma = sigma
         self.decay = decay
         self.freq = freq

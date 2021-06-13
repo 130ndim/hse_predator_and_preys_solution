@@ -23,13 +23,13 @@ class TD3Config:
     actor: ActorConfig = ActorConfig()
     critic: CriticConfig = CriticConfig()
 
-    noise: Literal['normal', 'ou'] = 'ou'
+    noise: Literal['normal', 'ou'] = 'normal'
     add_noise_on_inference: bool = False
 
     gamma: float = 0.99
     tau: float = 0.995
 
-    policy_update_freq: int = 20
+    policy_update_freq: int = 5
 
     policy_noise: float = 0.2
     noise_clip: float = 0.5
@@ -78,7 +78,7 @@ class TD3Agent(Agent):
         state = state2tensor(state).to(self.device)
         action = self.actor(state).squeeze().cpu().numpy()
         if self._training or self.add_noise_on_inference:
-            action = self.noise(action).clip(-1., 1.)
+            action = self.noise(action)
         return np.clip(action, -1., 1.)
 
     def train(self):

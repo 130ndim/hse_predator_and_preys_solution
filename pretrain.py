@@ -28,15 +28,18 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-device', '--device', dest='device', default='cpu')
 parser.add_argument('-batch_size', '--batch_size', dest='batch_size', type=int, default=128)
-parser.add_argument('-n_steps', '--n_steps', dest='n_steps', type=int, default=90000)
+parser.add_argument('-n_steps', '--n_steps', dest='n_steps', type=int, default=300000)
 parser.add_argument('-ckpt_save_path', '--ckpt_save_path', dest='ckpt_save_path', default='.', type=str)
 parser.add_argument('-lr', '--lr', dest='lr', default=1e-3, type=float)
 parser.add_argument('-wd', '--wd', dest='wd', default=1e-5, type=float)
 args = parser.parse_args()
 
 
-def angdiff(a1, a2):
-    return (math.pi * ((a1 - a2 + 1) % 2 - 1)).abs().sum()
+# def angdiff(a1, a2):
+#     return (math.pi * ((a1 - a2 + 1) % 2 - 1)).abs().sum()
+
+def angle_loss(x, y):
+    return torch.atan2(torch.sin(math.pi * (x - y)), torch.cos(math.pi * (x - y))).mean()
 
 
 def pretrain(prey_config: ActorConfig = ActorConfig(),
@@ -53,8 +56,8 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
     pred_optim = AdamW(predator_actor.parameters(), lr=args.lr, weight_decay=args.wd)
     prey_optim = AdamW(prey_actor.parameters(), lr=args.lr, weight_decay=args.wd)
 
-    pred_scheduler = StepLR(pred_optim, step_size=30000)
-    prey_scheduler = StepLR(pred_optim, step_size=30000)
+    pred_scheduler = StepLR(pred_optim, step_size=100000)
+    prey_scheduler = StepLR(pred_optim, step_size=100000)
 
     prey_actor.to(device)
     predator_actor.to(device)
