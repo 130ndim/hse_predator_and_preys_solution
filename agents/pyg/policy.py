@@ -5,9 +5,9 @@ from typing_extensions import Literal
 
 import torch
 from torch import Tensor, nn
-from torch.nn import Sequential as Seq, Linear as Lin, LeakyReLU as LReLU, init
+from torch.nn import Sequential as Seq, Linear as Lin, LeakyReLU as LReLU, init, ELU
 
-from torch_geometric.nn import NNConv
+from torch_geometric.nn import NNConv, GATConv
 
 from ..net import FFN
 from ..utils import reset
@@ -16,7 +16,7 @@ from ..utils import reset
 @dataclass
 class ActorConfig:
     input_size: Union[int, Tuple[int, int, int]] = (2, 2, 3)
-    hidden_sizes: Sequence[int] = (64, 512, 512)
+    hidden_sizes: Sequence[int] = (16, 64, 64)
 
     max_grad_norm: float = 0.5
 
@@ -30,7 +30,7 @@ class ActorConfig:
 class PredatorActor(nn.Module):
     def __init__(self, config: ActorConfig):
         super().__init__()
-        self.pos_embedding = FFN([3] + [config.hidden_sizes[0]] * 2, layer_norm=False)
+        self.pos_embedding = FFN([3] + [config.hidden_sizes[0]] * 2, layer_norm=False, act=ELU())
         self.entity_embedding = nn.Embedding(3, config.hidden_sizes[0])
 
         self.edge_type_embedding = nn.Embedding(10, 10)
@@ -38,14 +38,24 @@ class PredatorActor(nn.Module):
         self.conv1 = NNConv(
             config.hidden_sizes[0],
             config.hidden_sizes[0],
-            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=False),
+            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=False, act=ELU()),
             aggr='mean'
         )
+        self.conv2 = GATConv(
+            config.hidden_sizes[0],
+            config.hidden_sizes[1],
+            heads=4,
+            concat=False,
+            add_self_loops=True,
+            negative_slope=0.1
+        )
 
-        self.act = LReLU(0.1)
+        self.ln = nn.LayerNorm(config.hidden_sizes[1], elementwise_affine=False)
 
-        self.net = FFN(list(config.hidden_sizes) + [1])
-        self.net.seq.add_module(str(len(self.net.seq)), nn.Tanh())
+        self.act = ELU()
+
+        self.net = FFN(list(config.hidden_sizes[1:]) + [1], act=ELU())
+        self.net.seq.add_module(str(len(self.net.seq)), nn.Softsign())
 
         self.atan_trick = config.atan_trick
 
@@ -60,6 +70,12 @@ class PredatorActor(nn.Module):
             if isinstance(m, Lin):
                 init.xavier_uniform_(m.weight, 0.01)
                 init.zeros_(m.bias)
+        for p in self.conv2.parameters():
+            if p.ndim == 1:
+                init.zeros_(p)
+            else:
+                init.xavier_uniform_(p, 0.01)
+        init.zeros_(self.conv2.bias)
         self.net.reset_parameters()
         self.net.seq[-2].weight.data.uniform_(-0.01, 0.01)
 
@@ -77,7 +93,8 @@ class PredatorActor(nn.Module):
 
         x = self.pos_embedding(x) + self.entity_embedding(mask)
 
-        x = x + self.act(self.conv1(x, edge_index, e))
+        x = self.act(self.conv1(x, edge_index, e))
+        x = self.ln(self.conv2(x, edge_index))
 
         x = x[mask == 0]
         x = self.net(x)
@@ -94,7 +111,7 @@ class PredatorActor(nn.Module):
 class PreyActor(nn.Module):
     def __init__(self, config: ActorConfig):
         super().__init__()
-        self.pos_embedding = FFN([3] + [config.hidden_sizes[0]] * 2, layer_norm=False)
+        self.pos_embedding = FFN([3] + [config.hidden_sizes[0]] * 2, layer_norm=False, act=ELU())
         self.entity_embedding = nn.Embedding(3, config.hidden_sizes[0])
 
         self.edge_type_embedding = nn.Embedding(10, 10)
@@ -102,14 +119,24 @@ class PreyActor(nn.Module):
         self.conv1 = NNConv(
             config.hidden_sizes[0],
             config.hidden_sizes[0],
-            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=False),
+            nn=FFN([12, config.hidden_sizes[0], config.hidden_sizes[0] ** 2], layer_norm=False, act=ELU()),
             aggr='mean'
         )
+        self.conv2 = GATConv(
+            config.hidden_sizes[0],
+            config.hidden_sizes[1],
+            heads=4,
+            concat=False,
+            add_self_loops=True,
+            negative_slope=0.1
+        )
 
-        self.act = LReLU(0.1)
+        self.ln = nn.LayerNorm(config.hidden_sizes[1], elementwise_affine=False)
 
-        self.net = FFN(list(config.hidden_sizes) + [1])
-        self.net.seq.add_module(str(len(self.net.seq)), nn.Tanh())
+        self.act = ELU()
+
+        self.net = FFN(list(config.hidden_sizes[1:]) + [1], act=ELU())
+        self.net.seq.add_module(str(len(self.net.seq)), nn.Softsign())
 
         self.atan_trick = config.atan_trick
 
@@ -124,6 +151,12 @@ class PreyActor(nn.Module):
             if isinstance(m, Lin):
                 init.xavier_uniform_(m.weight, 0.01)
                 init.zeros_(m.bias)
+        for p in self.conv2.parameters():
+            if p.ndim == 1:
+                init.zeros_(p)
+            else:
+                init.xavier_uniform_(p, 0.01)
+        init.zeros_(self.conv2.bias)
         self.net.reset_parameters()
         self.net.seq[-2].weight.data.uniform_(-0.01, 0.01)
 
@@ -137,10 +170,12 @@ class PreyActor(nn.Module):
 
         pos = x[:, :2].clone()
         rel_coords = pos[row] - pos[col]
-        e = torch.cat([self.edge_type_embedding(edge_attr), rel_coords], dim=1)
 
         x = self.pos_embedding(x) + self.entity_embedding(mask)
-        x = x + self.act(self.conv1(x, edge_index, e))
+        e = torch.cat([self.edge_type_embedding(edge_attr), rel_coords], dim=1)
+
+        x = self.act(self.conv1(x, edge_index, e))
+        x = self.ln(self.conv2(x, edge_index))
 
         x = x[mask == 1]
         x = self.net(x)
