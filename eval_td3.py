@@ -73,23 +73,23 @@ if __name__ == '__main__':
         }
     }
     env = PredatorsAndPreysEnv(config, render=True)
-    predator_agent = TD3Agent.from_ckpt('./pred_td3.pt', map_location='cpu')
+    predator_agent = TD3Agent.from_ckpt('./pred2_td3.pt', map_location='cpu')
     # predator_agent = TD3Agent(TD3Config(actor=ActorConfig(hidden_sizes=(256, 256, 256))))
 
     predator_agent.eval()
     ckpt = torch.load('./pred_pretr.pt', map_location='cpu')
-    predator_agent.actor = PreyActor(ckpt['config'])
-    predator_agent.actor.load_state_dict(ckpt['state_dict'])
+    # predator_agent.actor = PreyActor(ckpt['config'])
+    # predator_agent.actor.load_state_dict(ckpt['state_dict'])
     predator_agent.add_noise_on_inference = True
     predator_agent.noise = OUNoise(scale=0.1)
     # predator_agent.noise.scale = 0.5
 
-    prey_agent = TD3Agent.from_ckpt('./prey_td3.pt', map_location='cpu')
+    prey_agent = TD3Agent.from_ckpt('./prey2_td3.pt', map_location='cpu')
     # prey_agent = TD3Agent(TD3Config(actor=ActorConfig(hidden_sizes=(256, 256, 256))))
     prey_agent.eval()
     ckpt = torch.load('./prey_pretr.pt', map_location='cpu')
-    prey_agent.actor = PreyActor(ckpt['config'])
-    prey_agent.actor.load_state_dict(ckpt['state_dict'])
+    # prey_agent.actor = PreyActor(ckpt['config'])
+    # prey_agent.actor.load_state_dict(ckpt['state_dict'])
     prey_agent.add_noise_on_inference = False
     prey_agent.noise.scale = 0.7
 

@@ -82,14 +82,19 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
 
         pred_action = predator_teacher.act(state_dict)
         prey_action = prey_teacher.act(state_dict)
-
-        batch.append(state2tensor(state_dict))
-        pred_actions.append(torch.tensor(pred_action, dtype=torch.float))
-        prey_actions.append(torch.tensor(prey_action, dtype=torch.float))
+        state = state2tensor(state_dict)
+        mask = state.mask
+        if not torch.isclose(state.x[mask != 2].abs() * 9, torch.tensor([9.]), rtol=0., atol=0.07).any():
+            batch.append(state)
+            pred_actions.append(torch.tensor(pred_action, dtype=torch.float))
+            prey_actions.append(torch.tensor(prey_action, dtype=torch.float))
+            state_dict, _, done = env.step(pred_action, prey_action)
+        else:
+            state_dict = env.reset()
         # evaluate_batch.append(list(state2tensor(state_dict)) +
         #                       [torch.tensor(pred_action, dtype=torch.float),
         #                        torch.tensor(prey_action, dtype=torch.float)])
-        state_dict, _, done = env.step(pred_action, prey_action)
+
 
         # if len(evaluate_batch) == args.batch_size * 100:
         #     pred_error = prey_error = 0.
@@ -125,7 +130,7 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
             prey_optim.step()
             prey_scheduler.step()
 
-            res = {'pred_mse': pred_loss.item(), 'prey_mse': prey_loss.item()}
+            res = {'pred_mse': pred_loss.sqrt().item(), 'prey_mse': prey_loss.sqrt().item()}
             bar.set_postfix(res)
 
             batch = []
@@ -148,6 +153,6 @@ def pretrain(prey_config: ActorConfig = ActorConfig(),
 
 
 if __name__ == '__main__':
-    prey_config = ActorConfig(entity='prey')
-    predator_config = ActorConfig(entity='predator')
+    prey_config = ActorConfig(entity='prey', hidden_sizes=(32, 256, 256))
+    predator_config = ActorConfig(entity='predator', hidden_sizes=(32, 256, 256))
     pretrain(prey_config, predator_config)
