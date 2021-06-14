@@ -54,7 +54,7 @@ if __name__ == '__main__':
     #                          entity='prey')
     config = {
         "game": {
-            "num_obsts": 3,
+            "num_obsts": 10,
             "num_preds": 2,
             "num_preys": 5,
             "x_limit": 9,
@@ -81,8 +81,9 @@ if __name__ == '__main__':
     predator_agent.actor = PreyActor(ckpt['config'])
     predator_agent.actor.load_state_dict(ckpt['state_dict'])
     predator_agent.add_noise_on_inference = True
-    predator_agent.noise = OUNoise()
+    predator_agent.noise = OUNoise(scale=0.1)
     # predator_agent.noise.scale = 0.5
+
     prey_agent = TD3Agent.from_ckpt('./prey_td3.pt', map_location='cpu')
     # prey_agent = TD3Agent(TD3Config(actor=ActorConfig(hidden_sizes=(256, 256, 256))))
     prey_agent.eval()
@@ -91,6 +92,7 @@ if __name__ == '__main__':
     prey_agent.actor.load_state_dict(ckpt['state_dict'])
     prey_agent.add_noise_on_inference = False
     prey_agent.noise.scale = 0.7
+
     print(prey_agent.noise)
     for n, p in predator_agent.actor.net.seq.named_parameters():
         print(n, p)
